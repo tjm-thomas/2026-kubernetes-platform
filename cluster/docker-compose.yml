@@ -1,4 +1,7 @@
 # Single-node k3s cluster (control plane + worker) running in Docker.
+# Run from cluster/: docker compose up -d, then ../scripts/setup.sh
+name: kubernetes
+
 services:
   k3s:
     image: rancher/k3s:v1.36.5-k3s1
@@ -19,11 +22,11 @@ services:
       K3S_KUBECONFIG_MODE: "644"
     volumes:
       - k3s-data:/var/lib/rancher/k3s
-      - ./kubeconfig:/output
-      - ./manifests:/manifests:ro
+      - ./kubeconfig:/output             # admin kubeconfig (git-ignored, a secret)
+      - ..:/platform:ro                  # whole repo, so setup can apply cluster/ and apps/ manifests
     ports:
       - "6443:6443"                      # Kubernetes API (kubectl)
-      - "${K3S_HTTP_PORT:-8081}:80"      # Traefik ingress: kanso.localhost, headlamp.localhost
+      - "${K3S_HTTP_PORT:-8081}:80"      # Traefik ingress: *.localhost
 
 volumes:
   k3s-data:

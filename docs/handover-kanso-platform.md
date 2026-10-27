@@ -1,8 +1,9 @@
 # Handover: generalised Kubernetes platform (kanso-platform)
 
 **Date:** 2026-10-27 · **Fallback repo:** `thomasjmtan/2026-kubernetes-fe-test` (public, branches `main` + `staging`)
-**Next home:** a free GitHub organization (name TBD, e.g. `kanso-lab`) with `kanso-platform`,
+**Next home:** the free GitHub organization `tjm-thomas` with `kanso-platform`,
 `kanso-frontend`, `kanso-backend`. Kanso is a placeholder app.
+The platform repo is `tjm-thomas/2026-kubernetes-platform` (public).
 
 You are picking up a working single-repo trial and turning it into a **multi-repo platform**.
 The user wants small steps, simple English, and short concrete answers.
@@ -63,7 +64,7 @@ kanso-platform/
 2. **Platform deploy workflow:** inputs app/env/image. Staging rolls. Prod is checked against
    staging's image. Rollback workflow.
 3. **kanso-frontend:** move `frontend/`. CI builds on GitHub-hosted runners, pushes
-   `ghcr.io/<org>/kanso-frontend:<tree hash>`, triggers platform.
+   `ghcr.io/tjm-thomas/kanso-frontend:<tree hash>`, triggers platform.
 4. **kanso-backend:** a tiny API (`GET /api/status` returns its version). Ingress `/api`. The
    dashboard shows the backend version, which proves the apps talk to each other.
 5. **Module swap test:** add or remove an app from staging only; prod untouched.
@@ -195,7 +196,6 @@ Traefik, Headlamp
 
 ## 10. Open questions for the user
 
-1. Organization name?
-2. Backend language: Node.js, Python, Go, or whatever the real backend uses?
-3. Local clone paths for the three repos?
-4. Required reviewer on the prod environment (free on public repos)? Optional.
+1. Backend language: Node.js, Python, Go, or whatever the real backend uses?
+2. Local clone paths for the three repos?
+3. Required reviewer on the prod environment (free on public repos)? Optional.
