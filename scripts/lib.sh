@@ -27,7 +27,7 @@ wait_for() {
 # load_env <env>: read environments/<env>/env.conf (NAMESPACE, HOST, BASIC_AUTH)
 load_env() {
   local file="${ROOT}/environments/${1:-}/env.conf"
-  if [ -z "${1:-}" ] || [ ! -f "${file}" ]; then
+  if ! [[ "${1:-}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || [ ! -f "${file}" ]; then
     echo "Unknown environment '${1:-}'. Known: $(ls "${ROOT}/environments" | tr '\n' ' ')" >&2
     exit 2
   fi
@@ -37,7 +37,7 @@ load_env() {
 # load_app <app>: read apps/<app>/app.env (IMAGE_REPO, INITIAL_IMAGE, PATH_PREFIX, ...)
 load_app() {
   local file="${ROOT}/apps/${1:-}/app.env"
-  if [ -z "${1:-}" ] || [ ! -f "${file}" ]; then
+  if ! [[ "${1:-}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || [ ! -f "${file}" ]; then
     echo "Unknown app '${1:-}'. Known: $(ls "${ROOT}/apps" | tr '\n' ' ')" >&2
     exit 2
   fi

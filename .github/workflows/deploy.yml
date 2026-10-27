@@ -1,0 +1,68 @@
+# Roll one app in one environment to an image. Only this repo deploys:
+# app repos build their image, then trigger this workflow (repository_dispatch, type "deploy",
+# client_payload {app, env, image, source}). It can also be run by hand from the Actions tab.
+# prod only accepts the image staging already runs (checked by ci/deploy.sh).
+name: Deploy
+run-name: Deploy ${{ inputs.app || github.event.client_payload.app }} to ${{ inputs.env || github.event.client_payload.env }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App (folder in apps/)
+        type: string
+        required: true
+      env:
+        description: Environment
+        type: choice
+        options: [staging, prod]
+      image:
+        description: Image, e.g. ghcr.io/tjm-thomas/2026-kanso-fe-main-user:<tree hash>
+        type: string
+        required: true
+  repository_dispatch:
+    types: [deploy]
+
+permissions:
+  contents: read
+
+env:
+  APP: ${{ inputs.app || github.event.client_payload.app }}
+  ENV: ${{ inputs.env || github.event.client_payload.env }}
+  IMAGE: ${{ inputs.image || github.event.client_payload.image }}
+  DEPLOY_SOURCE: ${{ github.event.client_payload.source || format('manual by {0}', github.actor) }}
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, k3s-local]
+    # prod needs approval (Settings > Environments > prod > Required reviewers)
+    environment: ${{ inputs.env || github.event.client_payload.env }}
+    concurrency:
+      group: deploy-${{ inputs.app || github.event.client_payload.app }}-${{ inputs.env || github.event.client_payload.env }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        # Git Bash explicitly (plain `bash` here is WSL). 8.3 short path: the runner cannot parse a quoted path with spaces
+        shell: C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Inputs reach scripts only through env vars, never pasted into the script text
+      - name: Pick the app's deployer secret
+        id: key
+        run: |
+          [[ "${APP}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "Bad app name: ${APP}" >&2; exit 2; }
+          echo "secret=DEPLOYER_KUBECONFIG_$(printf '%s' "${APP}" | tr 'a-z-' 'A-Z_')" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets[steps.key.outputs.secret] }}
+        run: |
+          [ -n "${KUBECONFIG_CONTENT}" ] || { echo "Secret ${{ steps.key.outputs.secret }} is not set" >&2; exit 1; }
+          export DEPLOYER_KUBECONFIG="${RUNNER_TEMP}/deployer.kubeconfig"
+          (umask 077; printf '%s' "${KUBECONFIG_CONTENT}" > "${DEPLOYER_KUBECONFIG}")
+          ci/deploy.sh "${APP}" "${ENV}" "${IMAGE}"
+
+      - name: Clean up
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/deployer.kubeconfig"

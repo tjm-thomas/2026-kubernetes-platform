@@ -11,6 +11,10 @@ if [ "$#" -ne 3 ]; then
   exit 2
 fi
 APP="$1" ENV="$2" IMAGE="$3"
+if ! [[ "${IMAGE}" =~ ^[a-z0-9./_-]+:[A-Za-z0-9._-]+$ ]]; then
+  echo "Not an image reference: ${IMAGE} (expected registry/name:tag)" >&2
+  exit 2
+fi
 load_app "${APP}"
 NS="$(env_ns "${ENV}")"
 if ! env_apps "${ENV}" | grep -qx "${APP}"; then
