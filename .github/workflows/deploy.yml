@@ -1,9 +1,9 @@
 # Roll one app in one environment to an image. Only this repo deploys:
-# app repos build their image, then trigger this workflow (repository_dispatch, type "deploy",
-# client_payload {app, env, image, source}). It can also be run by hand from the Actions tab.
+# app repos build their image, then trigger this workflow through the API (workflow_dispatch,
+# with a token that may only run workflows here). It can also be run by hand from the Actions tab.
 # prod only accepts the image staging already runs (checked by ci/deploy.sh).
 name: Deploy
-run-name: Deploy ${{ inputs.app || github.event.client_payload.app }} to ${{ inputs.env || github.event.client_payload.env }}
+run-name: Deploy ${{ inputs.app }} to ${{ inputs.env }}${{ inputs.source && format(' ({0})', inputs.source) || '' }}
 
 on:
   workflow_dispatch:
@@ -20,25 +20,27 @@ on:
         description: Image, e.g. ghcr.io/tjm-thomas/2026-kanso-fe-main-user:<tree hash>
         type: string
         required: true
-  repository_dispatch:
-    types: [deploy]
+      source:
+        description: Where the image comes from, e.g. repo@commit (optional)
+        type: string
+        required: false
 
 permissions:
   contents: read
 
 env:
-  APP: ${{ inputs.app || github.event.client_payload.app }}
-  ENV: ${{ inputs.env || github.event.client_payload.env }}
-  IMAGE: ${{ inputs.image || github.event.client_payload.image }}
-  DEPLOY_SOURCE: ${{ github.event.client_payload.source || format('manual by {0}', github.actor) }}
+  APP: ${{ inputs.app }}
+  ENV: ${{ inputs.env }}
+  IMAGE: ${{ inputs.image }}
+  DEPLOY_SOURCE: ${{ inputs.source || format('manual by {0}', github.actor) }}
 
 jobs:
   deploy:
     runs-on: [self-hosted, k3s-local]
     # prod needs approval (Settings > Environments > prod > Required reviewers)
-    environment: ${{ inputs.env || github.event.client_payload.env }}
+    environment: ${{ inputs.env }}
     concurrency:
-      group: deploy-${{ inputs.app || github.event.client_payload.app }}-${{ inputs.env || github.event.client_payload.env }}
+      group: deploy-${{ inputs.app }}-${{ inputs.env }}
       cancel-in-progress: false
     defaults:
       run:

@@ -16,6 +16,10 @@ if ! [[ "${IMAGE}" =~ ^[a-z0-9./_-]+:[A-Za-z0-9._-]+$ ]]; then
   exit 2
 fi
 load_app "${APP}"
+if [ "${IMAGE%:*}" != "${IMAGE_REPO}" ]; then
+  echo "${APP} only runs images from ${IMAGE_REPO} (see apps/${APP}/app.env), not ${IMAGE}" >&2
+  exit 1
+fi
 NS="$(env_ns "${ENV}")"
 if ! env_apps "${ENV}" | grep -qx "${APP}"; then
   echo "${APP} is not listed in environments/${ENV}/apps.txt" >&2

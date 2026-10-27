@@ -30,7 +30,7 @@ The user wants small steps, simple English, and short concrete answers.
 | Image tags | **Git tree hash of the app's content** (not the commit). GitHub's merge button never fast-forwards, so commit SHAs differ; the tree hash survives merge, squash and rebase |
 | Repo layout | `kanso-platform` (cluster, app modules, deploys), `kanso-frontend`, `kanso-backend` |
 | Who deploys | **Only `kanso-platform`.** App repos build on GitHub-hosted runners, push to GHCR, then **trigger the platform's deploy workflow** (inputs: app, env, image). The self-hosted runner serves the platform repo only |
-| App to platform trigger | A fine-grained token per app repo that can only trigger workflows in `kanso-platform`. GitLab equivalent: multi-project pipeline `trigger:` (built in, no extra token) |
+| App to platform trigger | A fine-grained token per app repo with only **Actions: Read and write** on the platform repo; it calls the Deploy workflow through the API (`workflow_dispatch`). Not `repository_dispatch`: that needs Contents: write, which could also push code. GitLab equivalent: multi-project pipeline `trigger:` (built in, no extra token) |
 | Namespaces | **One per environment, holding all apps** (`kanso-staging`, `kanso-prod`), so staging frontend talks to staging backend by name |
 | Routing | One host per environment. Ingress by path: `/` frontend, `/api` backend |
 | Cluster access | **One restricted deployer account per app** (RBAC `resourceNames` = that app's Deployment) |
@@ -51,7 +51,7 @@ kanso-platform/
 │  └─ prod/apps.txt
 ├─ ci/                      deploy logic called by the deploy workflow
 ├─ scripts/                 setup, add-app (from a template), remove-app, rollback
-└─ .github/workflows/       deploy.yml (workflow_dispatch + repository_dispatch), rollback.yml
+└─ .github/workflows/       deploy.yml (workflow_dispatch: app, env, image, source), rollback.yml
 ```
 
 ## 4. Phases (confirm each with the user)
@@ -109,7 +109,7 @@ All of these work and were reviewed. Port them, don't rewrite them:
 |---|---|
 | Organization | Group (subgroups possible) |
 | Self-hosted runner, label `k3s-local` | Group or project runner, `tags: [k3s-local]`. Registering needs group Owner; ask admins about existing instance runners |
-| Reusable workflow / repository_dispatch | `include:` a CI template from the platform project; multi-project `trigger:` |
+| Reusable workflow / workflow_dispatch API | `include:` a CI template from the platform project; multi-project `trigger:` |
 | Secrets / variables | CI/CD variables, Masked + Protected |
 | GHCR (public) | Project container registry (private). k3s needs a read-only **deploy token** |
 | Environments + required reviewers | Environments + manual prod job on a protected branch |
