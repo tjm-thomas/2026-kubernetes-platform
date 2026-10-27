@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kanso-web
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  minReadySeconds: 3
+  selector:
+    matchLabels:
+      app: kanso-web
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: kanso-web
+    spec:
+      containers:
+        - name: web
+          image: kanso-web:1.0.0          # imported into k3s by deploy.sh, not pulled
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5          # keep serving while Traefik drops this endpoint
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
