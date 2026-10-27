@@ -1,0 +1,38 @@
+# deploy-${APP} may only change the ${APP} Deployment in ${NAMESPACE}, and read
+# its rollout. Rendered and applied by setup.sh for every environment that runs the app.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deploy-${APP}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: ${APP}
+    app.kubernetes.io/managed-by: kanso-platform
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["${APP}"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]     # read only, for rollout status and undo
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deploy-${APP}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: ${APP}
+    app.kubernetes.io/managed-by: kanso-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deploy-${APP}
+subjects:
+  - kind: ServiceAccount
+    name: deploy-${APP}
+    namespace: ci

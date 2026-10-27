@@ -1,0 +1,9 @@
+# Applied to every app's Ingress in this environment: staging is behind basic auth.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: env
+  namespace: kanso-staging
+spec:
+  basicAuth:
+    secret: basic-auth

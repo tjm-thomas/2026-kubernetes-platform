@@ -1,0 +1,21 @@
+# Restricted CI account for one app: deploy-${APP}. Rendered and applied by setup.sh;
+# kubeconfig made by scripts/make-deployer-kubeconfig.sh. Rights: ci/deployer-role.yaml.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ci
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deploy-${APP}
+  namespace: ci
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: deploy-${APP}-token
+  namespace: ci
+  annotations:
+    kubernetes.io/service-account.name: deploy-${APP}
+type: kubernetes.io/service-account-token

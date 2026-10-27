@@ -1,0 +1,2 @@
+# Apps (folders in apps/) that run in staging. setup.sh removes apps not listed.
+fe-main-user

@@ -146,6 +146,14 @@ protected CI variables, and the platform CI template included by each app projec
   self-hosted runner minutes are billed at $0.002/min from March 2026.
 - **Scripted file edits:** escaping Windows backslashes through bash, sed or inline node broke
   twice. Write a small node script file, or use the Edit tool.
+- **Git Bash also rewrites environment values** for Windows programs like `envsubst`:
+  `PATH_PREFIX=/` became `C:/Program Files/Git/`. `render` in `scripts/lib.sh` runs it with
+  `MSYS_NO_PATHCONV=1`.
+- **Recreating the k3s container** (for example after a compose change) gave it a new random
+  hostname, so it registered as a new node and the old one stayed `NotReady`. The compose file
+  now sets `hostname: k3s`.
+- **Right after a rollout,** a request can still reach an old pod during its 5 s `preStop` delay.
+  Wait a few seconds before checking `/version.txt`.
 - **Visual checks:** headless Chrome over the DevTools protocol (node script) works. Use device
   emulation for phone widths, because a headless window has a minimum width.
 

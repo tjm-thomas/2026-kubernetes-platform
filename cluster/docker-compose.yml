@@ -6,6 +6,7 @@ services:
   k3s:
     image: rancher/k3s:v1.36.5-k3s1
     container_name: k3s
+    hostname: k3s          # fixed node name: a recreated container must not become a new node
     command: server --tls-san=127.0.0.1
     privileged: true
     restart: unless-stopped
@@ -23,7 +24,6 @@ services:
     volumes:
       - k3s-data:/var/lib/rancher/k3s
       - ./kubeconfig:/output             # admin kubeconfig (git-ignored, a secret)
-      - ..:/platform:ro                  # whole repo, so setup can apply cluster/ and apps/ manifests
     ports:
       - "6443:6443"                      # Kubernetes API (kubectl)
       - "${K3S_HTTP_PORT:-8081}:80"      # Traefik ingress: *.localhost
