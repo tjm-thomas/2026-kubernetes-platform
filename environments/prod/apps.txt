@@ -1,2 +1,3 @@
 # Apps (folders in apps/) that run in prod. setup.sh removes apps not listed.
 fe-main-user
+be-main
