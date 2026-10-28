@@ -1,15 +1,39 @@
 #!/usr/bin/env bash
 # Shared helpers for the platform scripts (scripts/ and ci/).
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# set -e also inside $(...): a failed check there must stop the script, not be ignored
+shopt -s inherit_errexit
 
-# Run kubectl. With DEPLOYER_KUBECONFIG set, use host kubectl with that kubeconfig;
-# otherwise exec inside the k3s container as admin (-i so piped stdin works).
+# use_cluster <env>: point kc at the environment's cluster (environments/<env>/env.conf).
+# DEPLOYER_KUBECONFIG set: that restricted key. Otherwise admin: CLUSTER_CONTAINER, or
+# CLUSTER_ADMIN_KUBECONFIG when no container is named.
+use_cluster() {
+  local CLUSTER_CONTAINER="" CLUSTER_ADMIN_KUBECONFIG=""
+  load_env "$1"
+  KC_KUBECONFIG="" KC_CONTAINER=""
+  if [ -n "${DEPLOYER_KUBECONFIG:-}" ]; then
+    KC_KUBECONFIG="${DEPLOYER_KUBECONFIG}"
+  elif [ -n "${CLUSTER_CONTAINER}" ]; then
+    KC_CONTAINER="${CLUSTER_CONTAINER}"
+  elif [ -n "${CLUSTER_ADMIN_KUBECONFIG}" ]; then
+    KC_KUBECONFIG="${ROOT}/${CLUSTER_ADMIN_KUBECONFIG}"
+  else
+    echo "environments/$1/env.conf names no CLUSTER_CONTAINER or CLUSTER_ADMIN_KUBECONFIG" >&2
+    exit 2
+  fi
+}
+
+# Run kubectl against the cluster chosen by use_cluster: host kubectl with a kubeconfig,
+# or exec inside the k3s container as admin (-i so piped stdin works).
 # MSYS_NO_PATHCONV: stop Git Bash on Windows rewriting arguments like /readyz
 kc() {
-  if [ -n "${DEPLOYER_KUBECONFIG:-}" ]; then
-    kubectl --kubeconfig "${DEPLOYER_KUBECONFIG}" "$@"
+  if [ -n "${KC_KUBECONFIG:-}" ]; then
+    kubectl --kubeconfig "${KC_KUBECONFIG}" "$@"
+  elif [ -n "${KC_CONTAINER:-}" ]; then
+    MSYS_NO_PATHCONV=1 docker exec -i "${KC_CONTAINER}" kubectl "$@"
   else
-    MSYS_NO_PATHCONV=1 docker exec -i k3s kubectl "$@"
+    echo "kc: call use_cluster <env> first" >&2
+    return 2
   fi
 }
 
@@ -65,6 +89,43 @@ render() {
 # current_image <ns> <app>: print the image the app's Deployment runs (empty if none)
 current_image() {
   kc -n "$1" get "deploy/$2" -o jsonpath='{.spec.template.spec.containers[?(@.name=="app")].image}'
+}
+
+# write_kubeconfig <env> <serviceaccount> <out-file>: write a kubeconfig for a service account in
+# namespace ci of the env's cluster (admin access via use_cluster first). Never prints the token.
+write_kubeconfig() {
+  local env="$1" sa="$2" out="$3" token_b64="" ca_b64 token
+  # The token controller fills the Secret in asynchronously: wait for it.
+  for _ in $(seq 1 30); do
+    token_b64="$(kc -n ci get secret "${sa}-token" -o jsonpath='{.data.token}' 2>/dev/null || true)"
+    [ -n "${token_b64}" ] && break
+    sleep 1
+  done
+  [ -n "${token_b64}" ] || { echo "${sa}-token has no token yet in ${env} (run setup.sh first?)" >&2; exit 1; }
+  ca_b64="$(kc -n ci get secret "${sa}-token" -o jsonpath='{.data.ca\.crt}')"
+  token="$(printf '%s' "${token_b64}" | base64 -d)"
+
+  mkdir -p "$(dirname "${out}")"
+  (umask 077; cat > "${out}" <<KUBECONFIG
+apiVersion: v1
+kind: Config
+clusters:
+  - name: k3s-${env}
+    cluster:
+      server: $( load_env "${env}"; echo "${API_SERVER}" )
+      certificate-authority-data: ${ca_b64}
+users:
+  - name: ${sa}
+    user:
+      token: ${token}
+contexts:
+  - name: ${sa}
+    context:
+      cluster: k3s-${env}
+      user: ${sa}
+current-context: ${sa}
+KUBECONFIG
+  )
 }
 
 # roll <ns> <app> <image> <change-cause>: set the image and wait until it is healthy

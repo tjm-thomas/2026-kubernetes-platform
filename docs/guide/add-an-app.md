@@ -30,7 +30,8 @@ Both environments share one host each. A path picks the app:
 | `kanso.localhost:8081/dashboard` | `fe-dashboard` |
 | `kanso.localhost:8081/api` | backend |
 
-The longest matching path wins. Staging uses `staging.kanso.localhost:8081`.
+The longest matching path wins. Staging runs on its own cluster and uses
+`staging.kanso.localhost:8082`.
 
 ---
 
@@ -39,18 +40,20 @@ The longest matching path wins. Staging uses `staging.kanso.localhost:8081`.
 **Your PC needs:**
 
 - Git Bash, Docker Desktop, and a clone of this repo.
-- A running cluster:
+- Both clusters running (staging and prod):
   ```bash
   cd cluster && docker compose up -d && cd ..
   ```
 - The GitHub runner running. Open `C:\Users\user\actions-runner-platform` and run `run.cmd`.
   It should say `Listening for Jobs`.
 
-**Get admin access.** Run all commands from the platform repo root, in Git Bash:
+**Get admin access.** Run all commands from the platform repo root, in Git Bash. `ks` talks to the
+staging cluster, `kp` to the prod cluster:
 
 ```bash
-export KUBECONFIG="$PWD/cluster/kubeconfig/kubeconfig.yaml"
-kubectl get nodes          # should show one node, Ready
+ks() { kubectl --kubeconfig "$PWD/cluster/kubeconfig/staging.yaml" "$@"; }
+kp() { kubectl --kubeconfig "$PWD/cluster/kubeconfig/kubeconfig.yaml" "$@"; }
+ks get nodes; kp get nodes      # each shows one node, Ready
 ```
 
 **Who does what.** Some steps need GitHub owner rights (secrets, tokens, package settings). If you
@@ -151,41 +154,45 @@ docker logout ghcr.io; docker manifest inspect ghcr.io/tjm-thomas/2026-kanso-<na
    ```bash
    ./scripts/setup.sh
    ```
-   Look for `app <name>: ...` under `Environment staging`. It ends with
+   Look for `app <name>: ...` under `[staging] Environment`. It ends with
    `deployment "<name>" successfully rolled out`.
 
 **Check:**
 ```bash
-kubectl -n kanso-staging get pods -l app=<name>        # READY 1/1, STATUS Running
-kubectl -n kanso-prod get deploy                        # your app is NOT here: prod untouched
+ks -n kanso-staging get pods -l app=<name>        # READY 1/1, STATUS Running
+kp -n kanso-prod get deploy                       # your app is NOT here: prod untouched
 pw="$(cat .secrets/staging-password.txt)"
-curl -u "staging:$pw" -H 'Host: staging.kanso.localhost' http://127.0.0.1:8081/<path>
+curl -u "staging:$pw" -H 'Host: staging.kanso.localhost' http://127.0.0.1:8082/<path>
 ```
 The last command should return your app's response. Also open
-`http://staging.kanso.localhost:8081/<path>` in a browser. The user is `staging`; the password is in
+`http://staging.kanso.localhost:8082/<path>` in a browser. The user is `staging`; the password is in
 `.secrets/staging-password.txt`.
 
 ---
 
 ## Part 3. Give the pipeline its key
 
-`setup.sh` created a restricted account, `deploy-<name>`. It can change **only** this app's
-Deployment. The pipeline needs a login file for it.
+`setup.sh` created a restricted account, `deploy-<name>`, on the staging cluster. It can change
+**only** this app's Deployment. The pipeline needs a login file for it. Each cluster has its own
+account, so each environment gets its own file (prod's comes in Part 5).
 
 1. Create the file:
    ```bash
-   ./scripts/make-deployer-kubeconfig.sh <name>    # prints .secrets/deploy-<name>.kubeconfig
+   ./scripts/make-deployer-kubeconfig.sh <name> staging    # prints .secrets/staging/deploy-<name>.kubeconfig
    ```
    It's a secret. `.secrets/` is git-ignored. Never commit it, paste it in chat, or email it.
-2. **(owner)** In the **platform** repo, go to **Settings → Secrets and variables → Actions → New
-   repository secret**:
+2. **(owner)** In the **platform** repo, go to **Settings → Environments → staging → Environment
+   secrets → Add environment secret**:
    - Name: **`DEPLOYER_KUBECONFIG_<NAME>`**. Use capitals, and change `-` to `_`. For example
      `reports-api` → `DEPLOYER_KUBECONFIG_REPORTS_API`.
-   - Value: the whole content of `.secrets/deploy-<name>.kubeconfig`.
+   - Value: the whole content of `.secrets/staging/deploy-<name>.kubeconfig`.
+
+   Use an **environment** secret, not a repository secret: the `prod` environment holds a secret
+   with the same name, for the prod cluster.
 
 **Check:** the account can change your app and nothing else:
 ```bash
-K="kubectl --kubeconfig .secrets/deploy-<name>.kubeconfig"
+K="kubectl --kubeconfig .secrets/staging/deploy-<name>.kubeconfig"
 $K auth can-i patch deploy/<name> -n kanso-staging        # yes
 $K auth can-i patch deploy/fe-main-user -n kanso-staging  # no
 ```
@@ -223,14 +230,18 @@ on its own.
    git add environments/prod/apps.txt && git commit -m "Add <name> app to prod" && git push
    ```
    Prod now runs `INITIAL_IMAGE`.
-2. For each later release, in the **app** repo, open a pull request **`staging` → `main`** and merge it.
-3. **(owner)** In the platform repo, go to **Actions → Deploy <name> to prod → Review deployments →
+2. Create the prod key: `./scripts/make-deployer-kubeconfig.sh <name> prod`.
+   **(owner)** Add its content as **`DEPLOYER_KUBECONFIG_<NAME>`** under
+   **Settings → Environments → prod → Environment secrets**, as in Part 3. The `prod` environment
+   already holds `STAGING_READER_KUBECONFIG`, which all apps share.
+3. For each later release, in the **app** repo, open a pull request **`staging` → `main`** and merge it.
+4. **(owner)** In the platform repo, go to **Actions → Deploy <name> to prod → Review deployments →
    Approve and deploy**.
 
 **Check:**
 ```bash
-kubectl -n kanso-prod get pods -l app=<name>                      # Running, 2 pods
-kubectl -n kanso-prod rollout history deploy/<name> | tail -1     # "promote ..."
+kp -n kanso-prod get pods -l app=<name>                      # Running, 2 pods
+kp -n kanso-prod rollout history deploy/<name> | tail -1     # "promote ..."
 ```
 
 Prod only accepts the image staging runs. If it refuses with *"staging runs …, not …"*, push the
@@ -243,10 +254,10 @@ change to `staging` first and wait for it to finish.
 | Task | How |
 |---|---|
 | Roll back one app | Platform repo → **Actions → Rollback** → app `<name>`, env `staging` or `prod` |
-| See what runs where | `kubectl get deploy -A` or Headlamp at `http://kubernetes.localhost:8081` |
-| Headlamp login token | `docker exec k3s kubectl -n headlamp create token headlamp-admin` |
-| See an app's logs | `kubectl -n kanso-staging logs deploy/<name>` |
-| Deploy history | `kubectl -n kanso-staging rollout history deploy/<name>` |
+| See what runs where | `ks get deploy -A`, `kp get deploy -A`, or Headlamp at `http://kubernetes.localhost:8082` (staging) and `:8081` (prod) |
+| Headlamp login token | `docker exec k3s-staging kubectl -n headlamp create token headlamp-admin` (staging), `docker exec k3s ...` (prod) |
+| See an app's logs | `ks -n kanso-staging logs deploy/<name>` |
+| Deploy history | `ks -n kanso-staging rollout history deploy/<name>` |
 
 ## Remove an app
 
@@ -254,23 +265,25 @@ change to `staging` first and wait for it to finish.
 2. Run `./scripts/setup.sh`. It removes the app from those environments only. Then commit and push.
 3. To remove it completely, also:
    - delete `apps/<name>/`
-   - delete the secret `DEPLOYER_KUBECONFIG_<NAME>`
+   - delete the environment secret `DEPLOYER_KUBECONFIG_<NAME>` in `staging` and in `prod`
    - delete the app repo's token
-   - run `kubectl -n ci delete sa/deploy-<name> secret/deploy-<name>-token`
+   - on each cluster, run `ks -n ci delete sa/deploy-<name> secret/deploy-<name>-token` (and the same with `kp`)
 
 ## When something goes wrong
 
 | You see | Likely cause | Fix |
 |---|---|---|
 | Pod `ImagePullBackOff` | Package is private, or the image name or tag is wrong | Part 1, step 8. Compare `INITIAL_IMAGE` with the package page |
-| Pod `CrashLoopBackOff`, or `READY 0/1` | Wrong `PORT` or `HEALTH_PATH`, or the app crashes | `kubectl -n kanso-staging describe pod -l app=<name>` and `logs deploy/<name>` |
+| Pod `CrashLoopBackOff`, or `READY 0/1` | Wrong `PORT` or `HEALTH_PATH`, or the app crashes | `ks -n kanso-staging describe pod -l app=<name>` and `logs deploy/<name>` |
 | Pod status `OOMKilled` | The app uses more than `MEMORY_LIMIT` | Raise `MEMORY_LIMIT` in `app.env`, run `setup.sh` |
 | `404` on your path | App not listed in `apps.txt`, wrong `PATH_PREFIX`, or the app doesn't handle the prefix | Part 0, question 5. Re-run `setup.sh` |
 | Your page loads, but CSS/JS come from another app | Absolute links like `/app.js` | Part 0, question 6 |
 | `401` on staging | Staging needs the password | User `staging`, password in `.secrets/staging-password.txt` |
 | Deploy: *"not listed in environments/…/apps.txt"* | The platform change isn't pushed yet | Part 4 |
 | Deploy: *"only runs images from …"* | `IMAGE_REPO` in `app.env` doesn't match the workflow | Make both say `ghcr.io/tjm-thomas/2026-kanso-<name>` |
-| Deploy: *"Secret DEPLOYER_KUBECONFIG_… is not set"* | Secret missing, or its name is wrong | Part 3, step 2 |
+| Deploy: *"Secret DEPLOYER_KUBECONFIG_… is not set"* | Secret missing in that environment, or its name is wrong | Part 3, step 2 (staging) or Part 5, step 2 (prod) |
+| Deploy: *"The deployer kubeconfig points at …, but <env> is at …"* | The key for the other cluster was saved in this environment | Replace it with `.secrets/<env>/deploy-<name>.kubeconfig` |
+| Deploy to prod: *"STAGING_READER_KUBECONFIG is not set"* | The `prod` environment lacks the read-only staging key | `./scripts/make-reader-kubeconfig.sh`, add its content to the `prod` environment |
 | App run: *"Secret PLATFORM_DEPLOY_TOKEN is not set"*, or `403` | Token missing, expired or wrong permission | Part 1, steps 5–6 |
 | Run stuck on *"Waiting for a runner"* | `run.cmd` isn't running | Start it in `C:\Users\user\actions-runner-platform` |
-| Deploys stopped working after `docker compose down -v` | The cluster was wiped, so all keys are new | Run `setup.sh`, then Part 3 again for every app |
+| Deploys stopped working after a cluster was wiped (`docker compose down -v`) | That cluster's keys are new | Run `setup.sh`, then make that environment's keys again for every app (and the reader key, for staging) and update the environment secrets |

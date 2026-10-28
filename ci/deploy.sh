@@ -2,6 +2,8 @@
 # Roll one app in one environment to an image. Called by the deploy workflow.
 # staging: deploy it. prod: only if staging is healthy and already runs that exact image.
 # Usage: DEPLOYER_KUBECONFIG=<deployer kubeconfig> ci/deploy.sh <app> <staging|prod> <image>
+# Each environment runs on its own cluster. For prod, STAGING_READER_KUBECONFIG (the read-only
+# staging account) is needed too, so the check can read staging. Without any keys, admin access.
 # DEPLOY_SOURCE (optional, e.g. "repo@commit") is added to the rollout history.
 set -euo pipefail
 . "$(dirname "$0")/../scripts/lib.sh"
@@ -20,23 +22,42 @@ if [ "${IMAGE%:*}" != "${IMAGE_REPO}" ]; then
   echo "${APP} only runs images from ${IMAGE_REPO} (see apps/${APP}/app.env), not ${IMAGE}" >&2
   exit 1
 fi
-NS="$(env_ns "${ENV}")"
+use_cluster "${ENV}"
+NS="${NAMESPACE}"
 if ! env_apps "${ENV}" | grep -qx "${APP}"; then
   echo "${APP} is not listed in environments/${ENV}/apps.txt" >&2
   exit 1
 fi
+if [ -n "${DEPLOYER_KUBECONFIG:-}" ]; then
+  # A key for the other cluster would fail later, or worse; stop before any change
+  server="$(kubectl config view --kubeconfig "${DEPLOYER_KUBECONFIG}" --minify -o jsonpath='{.clusters[0].cluster.server}')"
+  if [ "${server}" != "${API_SERVER}" ]; then
+    echo "The deployer kubeconfig points at ${server}, but ${ENV} is at ${API_SERVER}" >&2
+    exit 1
+  fi
+  # Restricted runs must read staging with the read-only key, never fall back to admin
+  if [ "${ENV}" = prod ] && [ -z "${STAGING_READER_KUBECONFIG:-}" ]; then
+    echo "STAGING_READER_KUBECONFIG is not set: prod needs it to check what staging runs" >&2
+    exit 1
+  fi
+fi
 SOURCE="${DEPLOY_SOURCE:+ (${DEPLOY_SOURCE})}"
 
-if [ "$(current_image "${NS}" "${APP}")" = "${IMAGE}" ]; then
+CURRENT_IMAGE="$(current_image "${NS}" "${APP}")"
+if [ "${CURRENT_IMAGE}" = "${IMAGE}" ]; then
   echo "${APP} in ${ENV} already runs ${IMAGE}; nothing to do"
   exit 0
 fi
 
 if [ "${ENV}" = prod ]; then
-  STAGING="$(env_ns staging)"
   echo "==> Checking ${APP} in staging is healthy and runs ${IMAGE}"
-  kc -n "${STAGING}" rollout status "deploy/${APP}" --timeout=10s
-  STAGING_IMAGE="$(current_image "${STAGING}" "${APP}")"
+  # On the staging cluster, with the read-only key (or admin when run without keys)
+  STAGING_IMAGE="$(
+    DEPLOYER_KUBECONFIG="${STAGING_READER_KUBECONFIG:-}"
+    use_cluster staging
+    kc -n "${NAMESPACE}" rollout status "deploy/${APP}" --timeout=10s >&2
+    current_image "${NAMESPACE}" "${APP}"
+  )"
   if [ "${STAGING_IMAGE}" != "${IMAGE}" ]; then
     echo "staging runs ${STAGING_IMAGE}, not ${IMAGE}." >&2
     echo "Only images tested on staging go to prod: deploy it to staging first." >&2

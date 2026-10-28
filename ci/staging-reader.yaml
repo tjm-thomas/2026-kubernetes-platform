@@ -1,0 +1,53 @@
+# Read-only CI account staging-reader, on the staging cluster only. The prod deploy uses it to
+# check that staging is healthy and runs the image being promoted. It can read, never change.
+# Rendered and applied by setup.sh; kubeconfig made by scripts/make-reader-kubeconfig.sh.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ci
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: staging-reader
+  namespace: ci
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: staging-reader-token
+  namespace: ci
+  annotations:
+    kubernetes.io/service-account.name: staging-reader
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: staging-reader
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/managed-by: kanso-platform
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: staging-reader
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/managed-by: kanso-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: staging-reader
+subjects:
+  - kind: ServiceAccount
+    name: staging-reader
+    namespace: ci

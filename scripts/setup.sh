@@ -1,36 +1,51 @@
 #!/usr/bin/env bash
-# Set up the cluster, the environments and their apps. Safe to re-run:
+# Set up each environment on its own cluster: the cluster itself, the environment and its apps.
+# Safe to re-run:
 # - never changes the image an app already runs (only ci/deploy.sh does that)
 # - removes apps that are no longer listed in environments/<env>/apps.txt
-# Start the cluster first: cd cluster && docker compose up -d
-# Usage: ./scripts/setup.sh
+# Start the clusters first: cd cluster && docker compose up -d
+# Usage: ./scripts/setup.sh [env]     (no env: every environment)
 set -euo pipefail
 unset DEPLOYER_KUBECONFIG   # setup always needs admin
 . "$(dirname "$0")/lib.sh"
 
-echo "==> Waiting for the k3s API"
-wait_for 120 kc get --raw /readyz
-wait_for 60 kc wait node --all --for=condition=Ready --timeout=5s
+if [ "$#" -gt 0 ]; then
+  ( load_env "$1" )   # exits with the list of known environments if unknown
+  envs="$1"
+else
+  envs="$(ls "${ROOT}/environments")"
+fi
 
-echo "==> Waiting for Traefik (bundled with k3s)"
-wait_for 180 kc -n kube-system get deploy/traefik
-kc -n kube-system rollout status deploy/traefik --timeout=180s
-
-echo "==> Applying cluster manifests"
-cat "${ROOT}"/cluster/manifests/*.yaml | kc apply -f -
-kc -n headlamp rollout status deploy/headlamp --timeout=180s
-
-echo "==> Applying deployer accounts (one per app)"
-for dir in "${ROOT}"/apps/*/; do
-  APP="$(basename "${dir}")" render "${ROOT}/ci/deployer-account.yaml" | kc apply -f -
-done
-
-for env_dir in "${ROOT}"/environments/*/; do
-  env="$(basename "${env_dir}")"
+for env in ${envs}; do
   (
-    load_env "${env}"
-    echo "==> Environment ${env} (${NAMESPACE}, ${HOST})"
+    use_cluster "${env}"
+    env_dir="${ROOT}/environments/${env}/"
+
+    echo "==> [${env}] Waiting for the k3s API"
+    wait_for 120 kc get --raw /readyz
+    wait_for 60 kc wait node --all --for=condition=Ready --timeout=5s
+
+    echo "==> [${env}] Waiting for Traefik (bundled with k3s)"
+    wait_for 180 kc -n kube-system get deploy/traefik
+    kc -n kube-system rollout status deploy/traefik --timeout=180s
+
+    echo "==> [${env}] Applying cluster manifests"
+    cat "${ROOT}"/cluster/manifests/*.yaml | kc apply -f -
+    kc -n headlamp rollout status deploy/headlamp --timeout=180s
+
+    apps="$(env_apps "${env}")"
+    echo "==> [${env}] Applying deployer accounts (one per app)"
+    for app in ${apps}; do
+      APP="${app}" render "${ROOT}/ci/deployer-account.yaml" | kc apply -f -
+    done
+
+    echo "==> [${env}] Environment (${NAMESPACE}, ${HOST})"
     kc apply -f - < "${env_dir}namespace.yaml"
+
+    # The read-only account the prod deploy uses to check staging
+    if [ "${env}" = staging ]; then
+      NAMESPACE="${NAMESPACE}" render "${ROOT}/ci/staging-reader.yaml" | kc apply -f -
+    fi
 
     # The Secret must exist before the middleware that uses it. Never overwritten;
     # the plain password is kept in git-ignored .secrets/.
@@ -44,7 +59,6 @@ for env_dir in "${ROOT}"/environments/*/; do
     fi
     kc apply -f - < "${env_dir}middleware.yaml"
 
-    apps="$(env_apps "${env}")"
     for app in ${apps}; do
       (
         load_app "${app}"

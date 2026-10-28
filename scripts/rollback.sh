@@ -10,7 +10,8 @@ if [ "$#" -ne 2 ]; then
 fi
 APP="$1" ENV="$2"
 load_app "${APP}"
-NS="$(env_ns "${ENV}")"
+use_cluster "${ENV}"
+NS="${NAMESPACE}"
 
 echo "==> Rolling back ${APP} in ${ENV}"
 kc -n "${NS}" rollout undo "deploy/${APP}"

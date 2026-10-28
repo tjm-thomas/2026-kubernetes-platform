@@ -1,7 +1,7 @@
 # How a deploy reaches the cluster
 
-This page explains **how the cluster learns that an app changed**, and **how many clusters the
-platform serves today**. To plug in a new app, see [add-an-app.md](add-an-app.md).
+This page explains **how the cluster learns that an app changed**, and **how the platform serves
+two clusters**. To plug in a new app, see [add-an-app.md](add-an-app.md).
 
 ---
 
@@ -29,12 +29,14 @@ app repo ──merge──▶ app workflow ──"please deploy"──▶ platfo
 2. **The app repo asks the platform to deploy.** It calls the platform's Deploy workflow with the
    app, `prod` and the image, using the `PLATFORM_DEPLOY_TOKEN` secret.
 3. **The platform workflow waits for approval.** `prod` is a protected GitHub environment, so a
-   reviewer must click **Approve and deploy**. The job then runs on the **self-hosted runner**,
-   which sits on the same PC as the cluster and can reach its API at `127.0.0.1:6443`.
-4. **[`ci/deploy.sh`](../../ci/deploy.sh) checks the image.** Prod only accepts the image staging
-   runs right now, and only if staging is healthy. Otherwise it refuses.
-5. **It changes the Deployment:** `kubectl set image deploy/<app> app=<image>`. It logs in as that
-   app's restricted deploy account, which can change only that app's Deployment.
+   reviewer must click **Approve and deploy**. The job then runs on the **self-hosted runner**
+   labelled `k3s-prod`, which sits on the same PC as the clusters and can reach their APIs.
+4. **[`ci/deploy.sh`](../../ci/deploy.sh) checks the image on the staging cluster.** It logs in
+   there with a **read-only** account, `staging-reader`. Prod only accepts the image staging runs
+   right now, and only if staging is healthy. Otherwise it refuses.
+5. **It changes the Deployment on the prod cluster:** `kubectl set image deploy/<app> app=<image>`.
+   It logs in as that app's restricted deploy account on the prod cluster, which can change only
+   that app's Deployment.
 6. **Kubernetes takes over:**
    - It sees that the Deployment's desired image changed.
    - It **pulls** that image from GHCR and starts a new pod.
@@ -59,21 +61,32 @@ This platform does **not** use them, by design.
 
 ---
 
-## The platform serves one cluster
+## The platform serves two clusters
 
-Today everything targets **one k3s cluster with one node**: the `k3s` Docker container on the
-local PC.
+Each environment runs on its **own** k3s cluster. Locally, each one is a Docker container:
 
-- **Staging and prod are not separate clusters.** They are two namespaces, `kanso-staging` and
-  `kanso-prod`, inside that one cluster.
-- **Every deploy goes to `127.0.0.1:6443`.** The deploy keys, the GitHub secrets and the runner all
-  point there.
+| Environment | Cluster | API | Namespace |
+|---|---|---|---|
+| staging | `k3s-staging` | `127.0.0.1:6444` | `kanso-staging` |
+| prod | `k3s` | `127.0.0.1:6443` | `kanso-prod` |
 
-A multi-node setup would still be **one** cluster, spread over several
-machines. To serve a **second** cluster, for example a separate prod cluster, the platform would
-need:
+The clusters share no namespace and no accounts: the deploy scripts can only change staging with
+staging keys, and prod with prod keys. One gap remains: today one self-hosted runner, on the PC
+that runs both clusters, serves both environments, and that PC can reach both clusters as admin
+through Docker. Separate runners on separate machines close that gap.
 
-- a kubeconfig and a secret for each app on **each** cluster;
-- a way to tell the deploy scripts which cluster an environment lives on;
-- a new way for the prod check in step 4 to read what staging runs, because staging would then be
-  on another cluster.
+**How each part knows which cluster to use:**
+
+- **`environments/<env>/env.conf`** names the cluster: the container for admin access, and the
+  API address that goes into deploy keys. Every script reads it.
+- **Deploy keys are per app and per cluster.** Each GitHub environment (`staging`, `prod`) holds its
+  own `DEPLOYER_KUBECONFIG_<APP>` secret, for its own cluster. A key for the wrong cluster is
+  refused before anything changes.
+- **The prod check reads staging with `STAGING_READER_KUBECONFIG`**, a read-only account on the
+  staging cluster. It can look at Deployments in `kanso-staging`, and nothing else. Only the `prod`
+  environment holds it.
+- **The workflows pick the runner by environment** (labels `k3s-staging`, `k3s-prod`). Today one
+  runner carries both labels.
+
+To move a cluster to another machine later, point its `env.conf` at an admin kubeconfig
+(`CLUSTER_ADMIN_KUBECONFIG`) and its new `API_SERVER`, then make its keys again.

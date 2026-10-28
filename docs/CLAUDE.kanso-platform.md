@@ -8,14 +8,17 @@ How to add an app: `docs/guide/add-an-app.md`. How deploys reach the cluster: `d
 
 ## Fixed decisions (don't reopen)
 
-- k3s only, running in one Docker container locally. Push-based deploys; **no GitOps tools**.
+- k3s only. One cluster per environment: locally `k3s-staging` and `k3s` (prod), one Docker
+  container each. Push-based deploys; **no GitOps tools**.
 - **Only this repo deploys.** App repos build on GitHub-hosted runners, push to GHCR, and trigger
   this repo's deploy workflow with `app`, `env`, `image`. The self-hosted runner serves this repo only.
 - Per app repo: push to `staging` deploys to staging; merge to `main` promotes. **Prod only takes
   the image staging currently runs.** Image tag = git tree hash of the app's content. Never
   rebuild or overwrite an existing tag.
-- One namespace per environment (`kanso-staging`, `kanso-prod`) holding all apps. Ingress by
-  path (`/` frontend, `/api` backend). One restricted deployer account per app.
+- One namespace per environment (`kanso-staging`, `kanso-prod`) holding all apps, each on its own
+  cluster. Ingress by path (`/` frontend, `/api` backend). One restricted deployer account per app
+  per cluster (GitHub environment secrets). The prod check reads staging through the read-only
+  `staging-reader` account.
 - App modules live in `apps/<name>/`. `environments/<env>/apps.txt` decides what runs where.
 
 ## This machine (Windows 11, Git Bash, Docker Desktop)
@@ -23,7 +26,9 @@ How to add an app: `docs/guide/add-an-app.md`. How deploys reach the cluster: `d
 - Workflows: `shell: C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail {0}`. Plain
   `bash` is WSL, and quoted paths with spaces aren't accepted.
 - `MSYS_NO_PATHCONV=1` only on `docker exec` calls with container paths. Never export it.
-- Ports: ingress `8081` (8080 is taken), API `6443`. URLs use `*.localhost`.
+- Ports: prod ingress `8081` (8080 is taken) and API `6443`; staging ingress `8082` and API `6444`.
+  URLs use `*.localhost`.
+- `docker exec -i` (used by `kc`) reads stdin: inside `while read` loops, give commands `</dev/null`.
 - For scripted edits that contain backslashes, write a node script file or use the Edit tool.
 
 ## Working rules

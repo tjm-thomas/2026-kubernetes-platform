@@ -23,7 +23,9 @@ env:
 
 jobs:
   rollback:
-    runs-on: [self-hosted, k3s-local]
+    # A runner that can reach this environment's cluster (labels k3s-staging, k3s-prod)
+    runs-on: [self-hosted, "k3s-${{ inputs.env }}"]
+    # The environment picks the secrets: each cluster has its own deploy keys
     environment: ${{ inputs.env }}
     concurrency:
       group: deploy-${{ inputs.app }}-${{ inputs.env }}

@@ -36,8 +36,10 @@ env:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, k3s-local]
-    # prod needs approval (Settings > Environments > prod > Required reviewers)
+    # A runner that can reach this environment's cluster (labels k3s-staging, k3s-prod)
+    runs-on: [self-hosted, "k3s-${{ inputs.env }}"]
+    # prod needs approval (Settings > Environments > prod > Required reviewers).
+    # The environment also picks the secrets: each cluster has its own deploy keys.
     environment: ${{ inputs.env }}
     concurrency:
       group: deploy-${{ inputs.app }}-${{ inputs.env }}
@@ -50,6 +52,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # Inputs reach scripts only through env vars, never pasted into the script text
+      # An environment secret: the staging and prod environments each hold the key for their cluster
       - name: Pick the app's deployer secret
         id: key
         run: |
@@ -59,12 +62,18 @@ jobs:
       - name: Deploy
         env:
           KUBECONFIG_CONTENT: ${{ secrets[steps.key.outputs.secret] }}
+          # Read-only key for the staging cluster; only the prod environment has it
+          READER_CONTENT: ${{ secrets.STAGING_READER_KUBECONFIG }}
         run: |
           [ -n "${KUBECONFIG_CONTENT}" ] || { echo "Secret ${{ steps.key.outputs.secret }} is not set" >&2; exit 1; }
           export DEPLOYER_KUBECONFIG="${RUNNER_TEMP}/deployer.kubeconfig"
           (umask 077; printf '%s' "${KUBECONFIG_CONTENT}" > "${DEPLOYER_KUBECONFIG}")
+          if [ -n "${READER_CONTENT}" ]; then
+            export STAGING_READER_KUBECONFIG="${RUNNER_TEMP}/staging-reader.kubeconfig"
+            (umask 077; printf '%s' "${READER_CONTENT}" > "${STAGING_READER_KUBECONFIG}")
+          fi
           ci/deploy.sh "${APP}" "${ENV}" "${IMAGE}"
 
       - name: Clean up
         if: always()
-        run: rm -f "${RUNNER_TEMP}/deployer.kubeconfig"
+        run: rm -f "${RUNNER_TEMP}/deployer.kubeconfig" "${RUNNER_TEMP}/staging-reader.kubeconfig"
