@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${APP}
+  labels:
+    app.kubernetes.io/name: ${APP}
+    app.kubernetes.io/managed-by: kanso-platform
+spec:
+  replicas: ${REPLICAS}
+  revisionHistoryLimit: 5
+  minReadySeconds: 3
+  selector:
+    matchLabels:
+      app: ${APP}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ${APP}
+    spec:
+      containers:
+        - name: app
+          image: ${IMAGE}
+          imagePullPolicy: IfNotPresent    # tags are never overwritten
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5          # keep serving while Traefik drops this endpoint
+          ports:
+            - containerPort: ${PORT}
+          readinessProbe:
+            httpGet:
+              path: ${HEALTH_PATH}
+              port: ${PORT}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: ${HEALTH_PATH}
+              port: ${PORT}
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: ${MEMORY_LIMIT}         # app.env; the pod is killed (OOMKilled) above this

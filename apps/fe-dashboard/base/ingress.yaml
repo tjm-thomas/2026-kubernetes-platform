@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${APP}
+  labels:
+    app.kubernetes.io/name: ${APP}
+    app.kubernetes.io/managed-by: kanso-platform
+  annotations:
+    # The environment's middleware (environments/<env>/middleware.yaml)
+    traefik.ingress.kubernetes.io/router.middlewares: ${NAMESPACE}-env@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ${HOST}
+      http:
+        paths:
+          - path: ${PATH_PREFIX}
+            pathType: Prefix
+            backend:
+              service:
+                name: ${APP}
+                port:
+                  number: 80
