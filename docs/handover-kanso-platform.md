@@ -28,11 +28,11 @@ The user wants small steps, simple English, and short concrete answers.
 | Branches per app repo | **Two branches.** Push to `staging` deploys to staging. Merge to `main` promotes to prod |
 | Promotion | Prod accepts **only the image staging currently runs**. Never rebuild for prod |
 | Image tags | **Git tree hash of the app's content** (not the commit). GitHub's merge button never fast-forwards, so commit SHAs differ; the tree hash survives merge, squash and rebase |
-| Repo layout | `kanso-platform` (cluster, app modules, deploys), `kanso-frontend`, `kanso-backend` |
+| Repo layout | `2026-kubernetes-platform` (cluster, app modules, deploys) and one repo per app: `2026-kanso-fe-main-user` (module `fe-main-user`), `2026-kanso-fe-dashboard` (module `fe-dashboard`, planned), a backend repo (planned). App code never lives in the platform repo, and there are no submodules: they are linked only by the image |
 | Who deploys | **Only `kanso-platform`.** App repos build on GitHub-hosted runners, push to GHCR, then **trigger the platform's deploy workflow** (inputs: app, env, image). The self-hosted runner serves the platform repo only |
 | App to platform trigger | A fine-grained token per app repo with only **Actions: Read and write** on the platform repo; it calls the Deploy workflow through the API (`workflow_dispatch`). Not `repository_dispatch`: that needs Contents: write, which could also push code. GitLab equivalent: multi-project pipeline `trigger:` (built in, no extra token) |
 | Namespaces | **One per environment, holding all apps** (`kanso-staging`, `kanso-prod`), so staging frontend talks to staging backend by name |
-| Routing | One host per environment. Ingress by path: `/` frontend, `/api` backend |
+| Routing | One host per environment. Ingress by path, longest prefix wins: `/` → `fe-main-user`, `/dashboard` → `fe-dashboard`, `/api` → backend. An app on a sub-path serves all its files under that prefix (for example `/dashboard/cube.js`), so it needs no other host and no CORS. Confirmed 2026-10-28 |
 | Cluster access | **One restricted deployer account per app** (RBAC `resourceNames` = that app's Deployment) |
 | Modularity | `apps/<name>/` module + `environments/<env>/apps.txt`. `setup.sh` applies listed apps and removes unlisted ones |
 | Visibility | Demo repos **public** (free runners, branch protection, environment reviewers). The real GitLab stays private (see section 6) |

@@ -47,4 +47,4 @@ spec:
               cpu: 10m
               memory: 16Mi
             limits:
-              memory: 64Mi
+              memory: ${MEMORY_LIMIT}         # app.env; the pod is killed (OOMKilled) above this

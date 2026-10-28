@@ -53,7 +53,8 @@ for env_dir in "${ROOT}"/environments/*/; do
         IMAGE="${IMAGE:-${INITIAL_IMAGE}}"
         replicas_var="REPLICAS_${env^^}"
         export REPLICAS="${!replicas_var:-1}"
-        echo "    app ${app}: ${IMAGE}, ${REPLICAS} replica(s), path ${PATH_PREFIX}"
+        export MEMORY_LIMIT="${MEMORY_LIMIT:-128Mi}"
+        echo "    app ${app}: ${IMAGE}, ${REPLICAS} replica(s), path ${PATH_PREFIX}, memory ${MEMORY_LIMIT}"
         render "${ROOT}/apps/${app}"/base/*.yaml "${ROOT}/ci/deployer-role.yaml" \
           | kc -n "${NAMESPACE}" apply -f - >/dev/null
       )

@@ -24,7 +24,7 @@ Traefik (bundled with k3s) routes traffic on host port 8081.
 | `environments/<env>/` | `env.conf` (namespace, host, basic auth), `apps.txt` (which apps run there), namespace and middleware |
 | `ci/` | `deploy.sh` (used by the deploy workflow) and the per-app deployer account templates |
 | `scripts/` | `setup.sh`, `rollback.sh`, `make-deployer-kubeconfig.sh`, shared helpers (`lib.sh`) |
-| `docs/` | Handover plan |
+| `docs/` | Handover plan, and [guide/add-an-app.md](docs/guide/add-an-app.md): step-by-step for plugging in a new app |
 
 App code lives in its own repo (for example `tjm-thomas/2026-kanso-fe-main-user`), which builds
 the image. This repo only says how to run it.
@@ -54,8 +54,7 @@ With `DEPLOYER_KUBECONFIG` set, the scripts use host `kubectl` with that app's r
 It can only change that app's Deployment. Without it, they use admin access inside the container.
 The deployer kubeconfig is a secret; it is written to git-ignored `.secrets/`.
 
-To add an app: copy `apps/fe-main-user/` to `apps/<name>/`, edit `app.env`, list it in
-`environments/<env>/apps.txt`, and run `./scripts/setup.sh`.
+To add an app, follow [docs/guide/add-an-app.md](docs/guide/add-an-app.md).
 
 ## Headlamp login token
 
