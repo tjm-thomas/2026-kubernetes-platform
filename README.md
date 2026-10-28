@@ -1,7 +1,6 @@
 # Kubernetes platform
 
 A k3s platform that deploys application repos as swappable modules. Kanso is the placeholder app.
-Plan and decisions: [docs/handover-kanso-platform.md](docs/handover-kanso-platform.md).
 
 **Status:** the cluster, both environments and the `fe-main-user` app work locally, with deploy,
 promote and rollback scripts. GitHub workflows come next.
@@ -24,7 +23,7 @@ Traefik (bundled with k3s) routes traffic on host port 8081.
 | `environments/<env>/` | `env.conf` (namespace, host, basic auth), `apps.txt` (which apps run there), namespace and middleware |
 | `ci/` | `deploy.sh` (used by the deploy workflow) and the per-app deployer account templates |
 | `scripts/` | `setup.sh`, `rollback.sh`, `make-deployer-kubeconfig.sh`, shared helpers (`lib.sh`) |
-| `docs/` | Handover plan, and [guide/add-an-app.md](docs/guide/add-an-app.md): step-by-step for plugging in a new app |
+| `docs/` | [guide/add-an-app.md](docs/guide/add-an-app.md): step-by-step for plugging in a new app, and [guide/how-deploys-work.md](docs/guide/how-deploys-work.md): how a deploy reaches the cluster |
 
 App code lives in its own repo (for example `tjm-thomas/2026-kanso-fe-main-user`), which builds
 the image. This repo only says how to run it.

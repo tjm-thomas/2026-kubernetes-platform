@@ -4,7 +4,7 @@ A generalised k3s platform that deploys application repos as swappable modules. 
 (`kanso-frontend`, `kanso-backend`) is the placeholder app. It's a GitHub demo of a setup that
 will later run on self-managed GitLab behind a closed network, so keep everything transferable.
 
-Full context, decisions and solved gotchas: `docs/handover-kanso-platform.md`. Read it first.
+How to add an app: `docs/guide/add-an-app.md`. How deploys reach the cluster: `docs/guide/how-deploys-work.md`.
 
 ## Fixed decisions (don't reopen)
 
