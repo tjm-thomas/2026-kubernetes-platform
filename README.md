@@ -18,7 +18,7 @@ both the control plane and the worker. Traefik (bundled with k3s) routes traffic
 | http://kanso.localhost:8081 | Kanso prod |
 | http://staging.kanso.localhost:8082 | Kanso staging (basic auth, user `staging`, password in `.secrets/staging-password.txt`) |
 | http://kubernetes.localhost:8081 | Headlamp for the prod cluster |
-| http://kubernetes.localhost:8082 | Headlamp for the staging cluster |
+| http://staging.kubernetes.localhost:8082 | Headlamp for the staging cluster |
 
 ## Layout
 

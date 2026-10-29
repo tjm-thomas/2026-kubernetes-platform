@@ -82,7 +82,7 @@ render() {
   local file
   for file in "$@"; do
     echo "---"
-    MSYS_NO_PATHCONV=1 envsubst '${APP} ${NAMESPACE} ${HOST} ${IMAGE} ${REPLICAS} ${PORT} ${PATH_PREFIX} ${HEALTH_PATH} ${MEMORY_LIMIT}' < "${file}"
+    MSYS_NO_PATHCONV=1 envsubst '${APP} ${NAMESPACE} ${HOST} ${IMAGE} ${REPLICAS} ${PORT} ${PATH_PREFIX} ${HEALTH_PATH} ${MEMORY_LIMIT} ${HEADLAMP_HOST}' < "${file}"
   done
 }
 

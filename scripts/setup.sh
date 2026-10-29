@@ -30,7 +30,7 @@ for env in ${envs}; do
     kc -n kube-system rollout status deploy/traefik --timeout=180s
 
     echo "==> [${env}] Applying cluster manifests"
-    cat "${ROOT}"/cluster/manifests/*.yaml | kc apply -f -
+    HEADLAMP_HOST="${HEADLAMP_HOST}" render "${ROOT}"/cluster/manifests/*.yaml | kc apply -f -
     kc -n headlamp rollout status deploy/headlamp --timeout=180s
 
     apps="$(env_apps "${env}")"

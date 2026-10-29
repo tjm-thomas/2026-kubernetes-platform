@@ -254,7 +254,7 @@ change to `staging` first and wait for it to finish.
 | Task | How |
 |---|---|
 | Roll back one app | Platform repo → **Actions → Rollback** → app `<name>`, env `staging` or `prod` |
-| See what runs where | `ks get deploy -A`, `kp get deploy -A`, or Headlamp at `http://kubernetes.localhost:8082` (staging) and `:8081` (prod) |
+| See what runs where | `ks get deploy -A`, `kp get deploy -A`, or Headlamp at `http://staging.kubernetes.localhost:8082` (staging) and `:8081` (prod) |
 | Headlamp login token | `docker exec k3s-staging kubectl -n headlamp create token headlamp-admin` (staging), `docker exec k3s ...` (prod) |
 | See an app's logs | `ks -n kanso-staging logs deploy/<name>` |
 | Deploy history | `ks -n kanso-staging rollout history deploy/<name>` |

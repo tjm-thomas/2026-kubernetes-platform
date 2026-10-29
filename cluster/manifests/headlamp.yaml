@@ -1,4 +1,4 @@
-# Headlamp web UI for the cluster, served at http://kubernetes.localhost:8081
+# Headlamp web UI for the cluster, served at http://${HEADLAMP_HOST} (HEADLAMP_HOST in env.conf)
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -52,7 +52,7 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: kubernetes.localhost
+    - host: ${HEADLAMP_HOST}
       http:
         paths:
           - path: /
