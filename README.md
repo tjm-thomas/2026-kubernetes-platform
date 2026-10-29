@@ -3,7 +3,12 @@
 A k3s platform that deploys application repos as swappable modules. Kanso is the placeholder app.
 
 **Status:** two clusters (staging and prod), three apps (`fe-main-user`, `be-main`, `fe-dashboard`),
-with deploy, promote and rollback through GitHub workflows.
+with deploy, promote and rollback through GitHub workflows — and, in parallel, through GitLab
+pipelines (group [tjm-thomas on gitlab.com](https://gitlab.com/tjm-thomas)). Each app repo's
+`DEPLOY_SYSTEM` file says which system deploys it (missing = GitHub); currently `fe-main-user`
+deploys through GitLab, the rest through GitHub. Every repo is one local working copy with two
+remotes (`origin` = GitHub, `gitlab` = GitLab) — push to both, or they drift. The differences are
+listed in [docs/guide/github-to-gitlab.md](docs/guide/github-to-gitlab.md).
 
 Each environment runs on its own k3s cluster. Locally, each cluster is one Docker container that is
 both the control plane and the worker. Traefik (bundled with k3s) routes traffic.
@@ -29,7 +34,8 @@ both the control plane and the worker. Traefik (bundled with k3s) routes traffic
 | `environments/<env>/` | `env.conf` (namespace, host, basic auth, which cluster), `apps.txt` (which apps run there), namespace and middleware |
 | `ci/` | `deploy.sh` (used by the deploy workflow), the per-app deployer account templates, and the read-only `staging-reader` account |
 | `scripts/` | `setup.sh`, `rollback.sh`, `make-deployer-kubeconfig.sh`, `make-reader-kubeconfig.sh`, shared helpers (`lib.sh`) |
-| `docs/` | [guide/add-an-app.md](docs/guide/add-an-app.md): step-by-step for plugging in a new app, and [guide/how-deploys-work.md](docs/guide/how-deploys-work.md): how a deploy reaches the cluster |
+| `.gitlab-ci.yml`, `ci/gitlab-job.sh` | The GitLab twin of the workflows: deploy (staging auto, prod manual) and rollback |
+| `docs/` | [guide/add-an-app.md](docs/guide/add-an-app.md): step-by-step for plugging in a new app, [guide/how-deploys-work.md](docs/guide/how-deploys-work.md): how a deploy reaches the cluster, and [guide/github-to-gitlab.md](docs/guide/github-to-gitlab.md): the GitLab mapping |
 
 App code lives in its own repo (for example `tjm-thomas/2026-kanso-fe-main-user`), which builds
 the image. This repo only says how to run it.

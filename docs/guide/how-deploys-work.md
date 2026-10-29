@@ -90,3 +90,9 @@ through Docker. Separate runners on separate machines close that gap.
 
 To move a cluster to another machine later, point its `env.conf` at an admin kubeconfig
 (`CLUSTER_ADMIN_KUBECONFIG`) and its new `API_SERVER`, then make its keys again.
+
+**The same model runs on GitLab.** Push to `staging` deploys, merge to `main` plus a manual
+play press promotes, and the same `ci/deploy.sh` enforces the same gates. What each GitHub
+piece becomes on GitLab — tokens, secrets, runner, prod gate — is in
+[github-to-gitlab.md](github-to-gitlab.md). Which system deploys an app is decided by the
+`DEPLOY_SYSTEM` file in that app's repo.

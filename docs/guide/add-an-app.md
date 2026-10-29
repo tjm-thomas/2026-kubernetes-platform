@@ -5,6 +5,9 @@ or anything else. It runs next to the existing apps without touching them.
 
 Follow the parts in order. Each part ends with a check. Don't move on until the check passes.
 
+This guide wires the app to **GitHub**. To deploy it through GitLab instead, do the same parts
+and then map the GitHub pieces using [github-to-gitlab.md](github-to-gitlab.md).
+
 ---
 
 ## The idea in one minute

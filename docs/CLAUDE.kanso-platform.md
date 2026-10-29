@@ -20,6 +20,11 @@ How to add an app: `docs/guide/add-an-app.md`. How deploys reach the cluster: `d
   per cluster (GitHub environment secrets). The prod check reads staging through the read-only
   `staging-reader` account.
 - App modules live in `apps/<name>/`. `environments/<env>/apps.txt` decides what runs where.
+- **GitLab runs in parallel** (group `tjm-thomas` on gitlab.com, public): same scripts, thin
+  `.gitlab-ci.yml` wrappers, images in `registry.gitlab.com/tjm-thomas/<repo>`, one group runner
+  (tags `k3s-staging`, `k3s-prod`, `builder`). `DEPLOY_SYSTEM` in each app repo picks the deploying
+  system (missing = GitHub); `fe-main-user` is on GitLab. Key variables are Protected **File**
+  variables scoped per environment. Mapping and enterprise notes: `docs/guide/github-to-gitlab.md`.
 
 ## This machine (Windows 11, Git Bash, Docker Desktop)
 
