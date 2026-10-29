@@ -1,0 +1,48 @@
+# Roll one app in one environment to an image — the GitLab twin of .github/workflows/.
+# Only two things create a pipeline here: an app repo's trigger token (app repos build their
+# image, then trigger this project), or "Run pipeline" in the UI (the Actions-tab equivalent).
+# A plain git push creates no pipeline. Variables: APP, ENV, IMAGE, SOURCE (optional),
+# ACTION (deploy, or rollback for scripts/rollback.sh).
+# prod is a manual job: a Maintainer presses play. The keys live in Settings > CI/CD >
+# Variables as Protected *file* variables scoped to the staging/prod environments, so only
+# pipelines on the protected main ref — and only the job bound to that environment — get them.
+# The runner is this project's group runner on the cluster PC (tags k3s-staging, k3s-prod);
+# it runs PowerShell, so each job is one line that hands off to Git Bash (8.3 path: a quoted
+# path with spaces does not survive the runner's command parsing).
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "web"
+
+deploy-staging:
+  rules:
+    - if: $ACTION != "rollback" && $ENV == "staging"
+  tags: [k3s-staging]
+  environment:
+    name: staging
+  variables:
+    ACTION: deploy
+  script:
+    - C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
+
+deploy-prod:
+  rules:
+    - if: $ACTION != "rollback" && $ENV == "prod"
+      when: manual
+  tags: [k3s-prod]
+  environment:
+    name: prod
+  variables:
+    ACTION: deploy
+  script:
+    - C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
+
+rollback:
+  rules:
+    - if: $ACTION == "rollback"
+      when: manual
+  tags: ["k3s-${ENV}"]
+  environment:
+    name: "${ENV}"
+  script:
+    - C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
