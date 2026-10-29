@@ -18,8 +18,13 @@ if ! [[ "${IMAGE}" =~ ^[a-z0-9./_-]+:[A-Za-z0-9._-]+$ ]]; then
   exit 2
 fi
 load_app "${APP}"
-if [ "${IMAGE%:*}" != "${IMAGE_REPO}" ]; then
-  echo "${APP} only runs images from ${IMAGE_REPO} (see apps/${APP}/app.env), not ${IMAGE}" >&2
+# IMAGE_REPO may list several allowed repos (space-separated), e.g. GHCR and the GitLab registry
+repo_ok=no
+for repo in ${IMAGE_REPO}; do
+  [ "${IMAGE%:*}" = "${repo}" ] && repo_ok=yes
+done
+if [ "${repo_ok}" != yes ]; then
+  echo "${APP} only runs images from: ${IMAGE_REPO} (see apps/${APP}/app.env), not ${IMAGE}" >&2
   exit 1
 fi
 use_cluster "${ENV}"
