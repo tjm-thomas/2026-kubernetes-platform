@@ -10,8 +10,11 @@ How to add an app: `docs/guide/add-an-app.md`. How deploys reach the cluster: `d
 
 - k3s only. One cluster per environment: locally `k3s-staging` and `k3s` (prod), one Docker
   container each. Push-based deploys; **no GitOps tools**.
-- **Only this repo deploys.** App repos build on GitHub-hosted runners, push to GHCR, and trigger
-  this repo's deploy workflow with `app`, `env`, `image`. The self-hosted runner serves this repo only.
+- **Only this repo deploys.** App repos build their image and trigger this repo's deploy with
+  `app`, `env`, `image` — on GitHub: GitHub-hosted runners, GHCR, the GitHub self-hosted runner
+  serves this repo only. On GitLab: the group runner on the cluster PC also builds app images
+  (tag `builder`), and every job it runs executes as SYSTEM with Docker on the cluster PC — keep
+  it marked Protected so only protected-ref jobs reach it.
 - Per app repo: push to `staging` deploys to staging; merge to `main` promotes. **Prod only takes
   the image staging currently runs.** Image tag = git tree hash of the app's content. Never
   rebuild or overwrite an existing tag.

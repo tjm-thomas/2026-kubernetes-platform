@@ -7,7 +7,10 @@ on top. Read [how-deploys-work.md](how-deploys-work.md) first for the model itse
 
 Both systems stay live. `DEPLOY_SYSTEM` (a one-line file in each app repo's root, missing =
 `github`) says which one deploys that app; the other one's pipeline sees the file and skips.
-Each repo is one local working copy with two remotes — push to both, or they drift.
+The switch gates the app repos only: a manual run of the platform's GitHub workflow can still
+deploy a GitLab-owned app (and the other way round) — that is a trusted admin action, same as
+any by-hand deploy. Each repo is one local working copy with two remotes — push to both, or
+they drift.
 
 ## The mapping
 
@@ -15,12 +18,12 @@ Each repo is one local working copy with two remotes — push to both, or they d
 |---|---|---|
 | `.github/workflows/deploy.yml`, `rollback.yml` | `.gitlab-ci.yml` + `ci/gitlab-job.sh` | One pipeline, jobs `deploy-staging` (auto), `deploy-prod` (manual), `rollback` (manual, variable `ACTION=rollback`). Logic stays in `ci/deploy.sh` and `scripts/rollback.sh`, shared with GitHub. |
 | App repo's `build-deploy.yml` | App repo's `.gitlab-ci.yml` + `ci/gitlab-build-deploy.sh` | Same flow: staging push builds once, main triggers a prod promote. Same tree-hash tag. |
-| `workflow_dispatch` + `PLATFORM_DEPLOY_TOKEN` (a PAT) | Pipeline trigger token + `PLATFORM_TRIGGER_TOKEN` variable | The app repo starts the platform pipeline over the API. Trigger tokens are per project and can only start pipelines — narrower than a PAT. |
+| `workflow_dispatch` + `PLATFORM_DEPLOY_TOKEN` (a PAT) | Pipeline trigger token + `PLATFORM_TRIGGER_TOKEN` variable | The app repo starts the platform pipeline over the API. Trigger tokens are per project and can only start pipelines — narrower than a PAT. But unlike GitHub's typed inputs, a trigger can set **any** pipeline variable: the platform jobs clear `BASH_ENV` (non-interactive bash would execute it) and refuse key paths outside GitLab's file-variable directory for exactly this reason. |
 | Environment secrets (`staging` / `prod` environments) | Protected CI/CD variables scoped to environment `staging` / `prod` | **Kubeconfig variables must be type File.** A plain variable hands the scripts the file's *content* where they expect a *path*; the error echoes the key into the public job log (this happened once — logs erased, key rotated). |
-| Required reviewers on the `prod` environment | Manual `deploy-prod` job + protected `main` + protected variables | On the free tier the play button itself is pressable by project members; the enforced fence is that prod keys only exist on protected refs, and `main` only changes by permitted merges. Tested: a pipeline on an unprotected branch gets no key and fails. |
+| Required reviewers on the `prod` environment | Manual `deploy-prod` job + protected `main` + protected variables | GitLab is documented to let only users who may merge/push to the protected branch run its pipelines and manual jobs (inferred, not tested with a Developer account — the pilot had only an Owner). The fence we **did** test: prod keys are protected variables, so a pipeline on an unprotected branch gets no key and fails. |
 | Actions tab → Run workflow | Pipelines → New pipeline (ref `main`) + typed variables | `ACTION`/`APP`/`ENV`/`IMAGE`. Needs CI/CD setting "Minimum role to use pipeline variables" = Maintainer (new projects default to nobody). |
 | GHCR (`ghcr.io/tjm-thomas/<repo>`) | GitLab registry (`registry.gitlab.com/tjm-thomas/<repo>`) | `IMAGE_REPO` in `apps/<app>/app.env` is a space-separated allow-list holding both. Public project ⇒ public registry ⇒ clusters pull anonymously. |
-| Runner labels `k3s-staging`, `k3s-prod` | Runner tags `k3s-staging`, `k3s-prod`, `builder` | One group runner on the cluster PC (shell executor, PowerShell; every job is one line handing off to Git Bash). `builder` marks it for app image builds, so the gitlab.com shared runners (which need account validation) are never used. |
+| Runner labels `k3s-staging`, `k3s-prod` | Runner tags `k3s-staging`, `k3s-prod`, `builder` | One group runner on the cluster PC (shell executor, PowerShell; every job is one line handing off to Git Bash). `builder` marks it for app image builds, so the gitlab.com shared runners (which need account validation) are never used. **Trust warning:** on GitHub, app builds ran on GitHub-hosted machines; here they run on the cluster PC as SYSTEM, with Docker (= admin on both clusters). Anyone who can make this runner run a job can bypass every fence above. Mark the runner **Protected** in its runner settings, so only jobs on protected branches reach it; the enterprise GitLab should keep cluster runners and build runners separate. |
 | `staging` branch unprotected | `staging` branch protected: Developers may push, nobody force-pushes | Protected variables only reach protected refs, and the app's trigger token is protected. Pushing stays free. |
 
 ## What a self-managed (enterprise) GitLab changes
@@ -28,7 +31,7 @@ Each repo is one local working copy with two remotes — push to both, or they d
 Settings, not code — the pipelines run unchanged:
 
 - **Protected environments** (Premium): lock who may run `deploy-prod` at the environment
-  level, closing the "anyone can press play" gap.
+  level, independent of branch permissions.
 - **Deployment approvals** (Premium): require a named approver before the job runs — the
   exact equivalent of GitHub's required reviewers.
 - **Registry and host names:** `registry.gitlab.com` and `gitlab.com` become the internal

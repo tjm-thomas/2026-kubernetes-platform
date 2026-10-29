@@ -16,13 +16,34 @@ if ! [[ "${APP}" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
   exit 2
 fi
 
+# A key must be the PATH GitLab wrote for a File-type variable: never the key's content
+# (a plain variable would reach kubectl, which echoes it into the public job log), and never
+# a caller-supplied path (trigger variables override project variables, so a caller could
+# point a key at any file on the runner). File variables land in <CI_PROJECT_DIR>.tmp\.
+# check_key_file <name> <value>: exits 1 with the name (never the value) when invalid.
+check_key_file() {
+  if [ ! -f "$2" ]; then
+    echo "$1 must be a File-type variable (its value is not a file GitLab wrote)" >&2
+    exit 1
+  fi
+  if [ -n "${CI_PROJECT_DIR:-}" ]; then
+    local v="${2//\\//}" d="${CI_PROJECT_DIR//\\//}"
+    if [[ "${v,,}" != "${d,,}.tmp/"* ]]; then
+      echo "$1 must be a File-type variable (its value is not in the file-variable directory)" >&2
+      exit 1
+    fi
+  fi
+}
+
 key_var="DEPLOYER_KUBECONFIG_$(printf '%s' "${APP}" | tr 'a-z-' 'A-Z_')"
 if [ -z "${!key_var:-}" ]; then
   echo "variable ${key_var} is not set for ${ENV}" >&2
   exit 1
 fi
+check_key_file "${key_var}" "${!key_var}"
 export DEPLOYER_KUBECONFIG="${!key_var}"
 if [ -n "${STAGING_READER_KUBECONFIG:-}" ]; then
+  check_key_file STAGING_READER_KUBECONFIG "${STAGING_READER_KUBECONFIG}"
   export STAGING_READER_KUBECONFIG
 fi
 export DEPLOY_SOURCE="${SOURCE:-}"

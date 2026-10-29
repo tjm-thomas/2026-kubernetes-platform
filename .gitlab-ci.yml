@@ -14,35 +14,42 @@ workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "web"
 
+# Each job clears BASH_ENV first: non-interactive bash expands it (command substitution
+# included) before the script runs, and a trigger can set any variable it likes.
+# resource_group serializes runs per app+env, like the GitHub workflows' concurrency groups.
+
 deploy-staging:
   rules:
     - if: $ACTION != "rollback" && $ENV == "staging"
   tags: [k3s-staging]
+  resource_group: "deploy-${APP}-${ENV}"
   environment:
     name: staging
   variables:
     ACTION: deploy
   script:
-    - C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
+    - $env:BASH_ENV=$null; C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
 
 deploy-prod:
   rules:
     - if: $ACTION != "rollback" && $ENV == "prod"
       when: manual
   tags: [k3s-prod]
+  resource_group: "deploy-${APP}-${ENV}"
   environment:
     name: prod
   variables:
     ACTION: deploy
   script:
-    - C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
+    - $env:BASH_ENV=$null; C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
 
 rollback:
   rules:
     - if: $ACTION == "rollback"
       when: manual
   tags: ["k3s-${ENV}"]
+  resource_group: "deploy-${APP}-${ENV}"
   environment:
     name: "${ENV}"
   script:
-    - C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
+    - $env:BASH_ENV=$null; C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -eo pipefail ci/gitlab-job.sh
