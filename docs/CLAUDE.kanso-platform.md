@@ -39,6 +39,16 @@ How to add an app: `docs/guide/add-an-app.md`. How deploys reach the cluster: `d
 - `docker exec -i` (used by `kc`) reads stdin: inside `while read` loops, give commands `</dev/null`.
 - For scripted edits that contain backslashes, write a node script file or use the Edit tool.
 
+## Another machine (Windows or Mac)
+
+`docs/guide/fresh-machine.md` is the self-contained bootstrap: three tiers of check, a
+registry of every key and runner registration (what makes it, where it is uploaded, what
+invalidates it), and the pass/fail commands. The facts that bite: every kubeconfig is bound
+to the cluster that issued it, so a new machine means re-making and re-uploading all seven;
+the first `setup.sh` on a fresh cluster must be `--initial all`; CI can point at one
+machine's clusters at a time; app images are amd64-only, so Apple Silicon needs either an
+emulated cluster or multi-arch builds; the scripts need bash 4+ (macOS ships 3.2).
+
 ## Working rules
 
 - Simple English, short concrete answers, small steps.
