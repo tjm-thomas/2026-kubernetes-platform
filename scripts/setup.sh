@@ -2,12 +2,39 @@
 # Set up each environment on its own cluster: the cluster itself, the environment and its apps.
 # Safe to re-run:
 # - never changes the image an app already runs (only ci/deploy.sh does that)
+# - an app that was removed and is listed again returns to the image it ran, from the ledger
 # - removes apps that are no longer listed in environments/<env>/apps.txt
 # Start the clusters first: cd cluster && docker compose up -d
-# Usage: ./scripts/setup.sh [env]     (no env: every environment)
+# Usage: ./scripts/setup.sh [env] [--initial <app>|--initial all]
+#   no env: every environment
+#   --initial: start these apps on INITIAL_IMAGE. Needed the first time an app is added,
+#     and after a cluster rebuild took the ledger with it. Without it, an app that is
+#     listed but has no Deployment and no ledger entry stops the run instead of being
+#     guessed at: guessing silently reverts production to a day-one version.
 set -euo pipefail
 unset DEPLOYER_KUBECONFIG   # setup always needs admin
 . "$(dirname "$0")/lib.sh"
+
+allow_initial=""
+positional=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --initial)
+      allow_initial="${allow_initial} ${2:?--initial needs an app name, or all}"
+      shift 2
+      ;;
+    *) positional="${positional} $1"; shift ;;
+  esac
+done
+set -- ${positional}
+
+# allow_for <app>: yes when --initial named this app (or all)
+allow_for() {
+  case " ${allow_initial} " in
+    *" all "*|*" $1 "*) echo yes ;;
+    *) echo no ;;
+  esac
+}
 
 if [ "$#" -gt 0 ]; then
   ( load_env "$1" )   # exits with the list of known environments if unknown
@@ -59,12 +86,19 @@ for env in ${envs}; do
     fi
     kc apply -f - < "${env_dir}middleware.yaml"
 
+    # Remember what everything runs before anything is applied or removed. Removal deletes
+    # the Deployment, which is otherwise the only record of the image it was on.
+    for app in $(kc -n "${NAMESPACE}" get deploy -l app.kubernetes.io/managed-by=kanso-platform \
+      -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true); do
+      ledger_record "${NAMESPACE}" "${app}" "$(current_image "${NAMESPACE}" "${app}")"
+    done
+
     for app in ${apps}; do
       (
         load_app "${app}"
         export APP="${app}" NAMESPACE HOST PORT PATH_PREFIX HEALTH_PATH
-        export IMAGE="$(current_image "${NAMESPACE}" "${app}" 2>/dev/null || true)"
-        IMAGE="${IMAGE:-${INITIAL_IMAGE}}"
+        IMAGE="$(choose_image "${NAMESPACE}" "${app}" "${INITIAL_IMAGE}" "$(allow_for "${app}")")"
+        export IMAGE
         replicas_var="REPLICAS_${env^^}"
         export REPLICAS="${!replicas_var:-1}"
         export MEMORY_LIMIT="${MEMORY_LIMIT:-128Mi}"

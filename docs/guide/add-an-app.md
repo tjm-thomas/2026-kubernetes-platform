@@ -153,12 +153,14 @@ docker logout ghcr.io; docker manifest inspect ghcr.io/tjm-thomas/2026-kanso-<na
    filled in from `app.env`.
 4. Switch it on in **staging only**. Add a line with `<name>` to
    **`environments/staging/apps.txt`**.
-5. Apply it:
+5. Apply it. `--initial` is needed the first time, because the app has never run here and
+   setup refuses to pick a version on its own:
    ```bash
-   ./scripts/setup.sh
+   ./scripts/setup.sh --initial <name>
    ```
    Look for `app <name>: ...` under `[staging] Environment`. It ends with
-   `deployment "<name>" successfully rolled out`.
+   `deployment "<name>" successfully rolled out`. Later runs need no flag: setup keeps the
+   image the app is running, or brings back the one it ran before it was removed.
 
 **Check:**
 ```bash
@@ -229,10 +231,11 @@ on its own.
 
 1. Add `<name>` to **`environments/prod/apps.txt`**, then run:
    ```bash
-   ./scripts/setup.sh
+   ./scripts/setup.sh --initial <name>
    git add environments/prod/apps.txt && git commit -m "Add <name> app to prod" && git push
    ```
-   Prod now runs `INITIAL_IMAGE`.
+   Prod now runs `INITIAL_IMAGE`. As in Part 4, `--initial` is only for an app's first
+   appearance in an environment.
 2. Create the prod key: `./scripts/make-deployer-kubeconfig.sh <name> prod`.
    **(owner)** Add its content as **`DEPLOYER_KUBECONFIG_<NAME>`** under
    **Settings → Environments → prod → Environment secrets**, as in Part 3. The `prod` environment
@@ -266,11 +269,23 @@ change to `staging` first and wait for it to finish.
 
 1. Delete its line from `environments/<env>/apps.txt` (one environment or both).
 2. Run `./scripts/setup.sh`. It removes the app from those environments only. Then commit and push.
+
+   Setup writes the image each app runs into a ConfigMap, `kanso-image-ledger`, in the
+   environment's namespace before it removes anything. List the app again and it comes back
+   on that image, not on `INITIAL_IMAGE` — which would silently revert it to its day-one
+   version. Removing an app does not clear its ledger entry, so the return trip is safe even
+   months later. Read it with
+   `ks -n kanso-staging get cm kanso-image-ledger -o jsonpath='{.data}'`.
+
+   The ledger lives in the cluster, so a rebuilt cluster loses it. Setup then stops rather
+   than guessing, and names the `--initial` flag.
 3. To remove it completely, also:
    - delete `apps/<name>/`
    - delete the environment secret `DEPLOYER_KUBECONFIG_<NAME>` in `staging` and in `prod`
    - delete the app repo's token
    - on each cluster, run `ks -n ci delete sa/deploy-<name> secret/deploy-<name>-token` (and the same with `kp`)
+   - drop its ledger entry, so a future app of the same name starts clean:
+     `ks -n kanso-staging patch cm kanso-image-ledger --type json -p '[{"op":"remove","path":"/data/<name>"}]'`
 
 ## When something goes wrong
 
@@ -290,3 +305,4 @@ change to `staging` first and wait for it to finish.
 | App run: *"Secret PLATFORM_DEPLOY_TOKEN is not set"*, or `403` | Token missing, expired or wrong permission | Part 1, steps 5–6 |
 | Run stuck on *"Waiting for a runner"* | `run.cmd` isn't running | Start it in `C:\Users\user\actions-runner-platform` |
 | Deploys stopped working after a cluster was wiped (`docker compose down -v`) | That cluster's keys are new | Run `setup.sh`, then make that environment's keys again for every app (and the reader key, for staging) and update the environment secrets |
+| `setup.sh` stops with "is listed … but is not running and has no recorded image" | The app has never run here, or the ledger went with a wiped cluster | Deploy the right image with `ci/deploy.sh <app> <env> <image>` and re-run setup, or accept the day-one version with `--initial <app>`. Don't reach for `--initial all` on prod without checking what it would start |

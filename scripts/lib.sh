@@ -91,6 +91,43 @@ current_image() {
   kc -n "$1" get "deploy/$2" -o jsonpath='{.spec.template.spec.containers[?(@.name=="app")].image}'
 }
 
+# The image ledger: a ConfigMap in the environment's namespace remembering what each app
+# runs. The Deployment is otherwise the only record, so removing an app destroyed it and
+# the app came back on INITIAL_IMAGE (its day-one version). setup.sh writes the ledger with
+# admin access before it changes anything; the restricted CI keys never touch it.
+IMAGE_LEDGER=kanso-image-ledger
+
+# ledger_record <ns> <app> <image>: remember the image an app runs
+ledger_record() {
+  kc -n "$1" create configmap "${IMAGE_LEDGER}" >/dev/null 2>&1 || true
+  kc -n "$1" patch configmap "${IMAGE_LEDGER}" --type merge -p "{\"data\":{\"$2\":\"$3\"}}" >/dev/null
+}
+
+# ledger_lookup <ns> <app>: print the recorded image, nothing if there is none
+ledger_lookup() {
+  kc -n "$1" get configmap "${IMAGE_LEDGER}" -o "jsonpath={.data['$2']}" 2>/dev/null || true
+}
+
+# choose_image <ns> <app> <initial-image> <allow-initial yes|no>: the image setup.sh applies.
+# A running app keeps what it runs; a re-added app returns to what the ledger remembers.
+# With neither, the run stops: a missing Deployment means either a brand-new app or one whose
+# record went with its cluster, and guessing picks a version nobody asked for.
+choose_image() {
+  local ns="$1" app="$2" initial="$3" allow="$4" image
+  image="$(current_image "${ns}" "${app}" 2>/dev/null || true)"
+  [ -n "${image}" ] || image="$(ledger_lookup "${ns}" "${app}" 2>/dev/null || true)"
+  if [ -z "${image}" ]; then
+    if [ "${allow}" != yes ]; then
+      echo "${app} is listed for ${ns} but is not running and has no recorded image." >&2
+      echo "Pass --initial ${app} to start it on ${initial} (INITIAL_IMAGE from apps/${app}/app.env)," >&2
+      echo "or deploy an image with ci/deploy.sh first." >&2
+      return 1
+    fi
+    image="${initial}"
+  fi
+  printf '%s' "${image}"
+}
+
 # write_kubeconfig <env> <serviceaccount> <out-file>: write a kubeconfig for a service account in
 # namespace ci of the env's cluster (admin access via use_cluster first). Never prints the token.
 write_kubeconfig() {
