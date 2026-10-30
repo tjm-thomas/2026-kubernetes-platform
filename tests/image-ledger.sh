@@ -32,6 +32,10 @@ LIVE="" RECORDED=""
 got="$(choose_image ns app repo/app:initial no 2>&1)" \
   && fail "an app with no Deployment and no record was guessed at: ${got}"
 grep -q -- --initial <<<"${got}" || fail "refusal should name the --initial flag: ${got}"
+# The routes it offers must work with no Deployment present: writing the ledger does;
+# ci/deploy.sh on its own does not (it needs an existing Deployment to set the image on).
+grep -q "${IMAGE_LEDGER}" <<<"${got}" || fail "refusal should show how to record the image in the ledger: ${got}"
+grep -q "deploy an image with ci/deploy.sh first" <<<"${got}" && fail "refusal still sends the operator to ci/deploy.sh, which fails without a Deployment"
 
 # ...unless the operator says so, which is how a new app is added.
 got="$(choose_image ns app repo/app:initial yes 2>&1)" \

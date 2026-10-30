@@ -118,9 +118,12 @@ choose_image() {
   [ -n "${image}" ] || image="$(ledger_lookup "${ns}" "${app}" 2>/dev/null || true)"
   if [ -z "${image}" ]; then
     if [ "${allow}" != yes ]; then
-      echo "${app} is listed for ${ns} but is not running and has no recorded image." >&2
-      echo "Pass --initial ${app} to start it on ${initial} (INITIAL_IMAGE from apps/${app}/app.env)," >&2
-      echo "or deploy an image with ci/deploy.sh first." >&2
+      echo "${app} is listed for ${ns} but is not running and has no recorded image. Either:" >&2
+      echo "  - record the image it should run, then re-run setup:" >&2
+      echo "      kubectl -n ${ns} patch configmap ${IMAGE_LEDGER} --type merge -p '{\"data\":{\"${app}\":\"<image>\"}}'" >&2
+      echo "      (create ${IMAGE_LEDGER} first if the namespace has none)" >&2
+      echo "  - or pass --initial ${app} to start it on ${initial} (INITIAL_IMAGE from apps/${app}/app.env)," >&2
+      echo "    then roll it to the right image with ci/deploy.sh." >&2
       return 1
     fi
     image="${initial}"
