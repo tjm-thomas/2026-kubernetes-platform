@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # GitLab job wrapper: the .gitlab-ci.yml jobs run this and nothing else.
 # Env in: ACTION (deploy|rollback, default deploy), APP, ENV, IMAGE, SOURCE (optional),
+# GITLAB_USER_LOGIN (predefined; recorded when SOURCE is absent),
 # and the keys as GitLab *file* variables (values are paths to files GitLab wrote):
 #   DEPLOYER_KUBECONFIG_<APP in caps, - as _>   this app's restricted key for ${ENV}
 #   STAGING_READER_KUBECONFIG                   read-only staging key (prod only)
@@ -46,7 +47,11 @@ if [ -n "${STAGING_READER_KUBECONFIG:-}" ]; then
   check_key_file STAGING_READER_KUBECONFIG "${STAGING_READER_KUBECONFIG}"
   export STAGING_READER_KUBECONFIG
 fi
-export DEPLOY_SOURCE="${SOURCE:-}"
+# A trigger from an app repo sets SOURCE (repo@commit). "Run pipeline" in the UI does not:
+# record who did it instead, as the GitHub workflow does ("manual by <actor>"). GitLab
+# documents GITLAB_USER_LOGIN as the pipeline's starter, except in manual jobs, where it
+# is whoever pressed play.
+export DEPLOY_SOURCE="${SOURCE:-manual by ${GITLAB_USER_LOGIN:-unknown}}"
 
 case "${ACTION}" in
   deploy)   exec ci/deploy.sh "${APP}" "${ENV}" "${IMAGE:?variable IMAGE is not set}" ;;
