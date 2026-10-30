@@ -7,6 +7,9 @@ on top. Read [how-deploys-work.md](how-deploys-work.md) first for the model itse
 
 Both systems stay live. `DEPLOY_SYSTEM` (a one-line file in each app repo's root, missing =
 `github`) says which one deploys that app; the other one's pipeline sees the file and skips.
+Both read it through the app repo's `ci/deploy-system.sh`, which ignores whitespace (a CRLF
+copy included) and case, and fails the job on any value other than `github` or `gitlab`
+rather than letting both systems skip.
 The switch gates the app repos only: a manual run of the platform's GitHub workflow can still
 deploy a GitLab-owned app (and the other way round) — that is a trusted admin action, same as
 any by-hand deploy. Each repo is one local working copy with two remotes — push to both, or

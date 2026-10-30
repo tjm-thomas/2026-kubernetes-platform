@@ -160,5 +160,3 @@ Known, small, and not yet built — they become real when the answers above arri
   images are imported from outside, its first half becomes "verify the image exists in
   the registry", keeping the same trigger. Scan gates (code scanning, Parasoft) slot in
   as stages before the trigger.
-- **`DEPLOY_SYSTEM`** is compared byte-for-byte, so a stray CRLF makes both CI systems
-  skip silently.
